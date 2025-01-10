@@ -15,6 +15,11 @@ Created by [@ammaar](https://x.com/ammaar)
 - 💬 Follow-up questions in the same chat session
 - 🎨 Clean, modern UI inspired by Perplexity
 - ⚡ Fast response times
+- 🔐 Secure authentication system
+- 🌓 Dark/Light theme toggle
+- 📋 One-click answer copying
+- 🔢 Search results count display
+- 🎯 Optimized UI for all screen resolutions
 
 ## Tech Stack
 
@@ -49,7 +54,12 @@ Created by [@ammaar](https://x.com/ammaar)
 3. Create a `.env` file in the root directory:
 
    ```
-   GOOGLE_API_KEY=your_api_key_here
+   GOOGLE_API_KEYS: your-api-key # your-api-key-1,your-api-key-2
+
+   AUTH_USERNAME: admin
+   AUTH_PASSWORD: admin123
+
+   NODE_ENV: development
    ```
 
 4. Start the development server:
@@ -65,8 +75,21 @@ Created by [@ammaar](https://x.com/ammaar)
 
 ## Environment Variables
 
-- `GOOGLE_API_KEY`: Your Google API key with access to Gemini API
-- `NODE_ENV`: Set to "development" by default, use "production" for production builds
+Required environment variables:
+
+- `GOOGLE_API_KEYS`: Comma-separated list of Google API keys with access to Gemini API
+  - Get your API key from: https://makersuite.google.com/app/apikey
+  - Multiple keys can be provided for load balancing
+
+Authentication variables:
+- `AUTH_USERNAME`: Username for authentication (default: admin)
+- `AUTH_PASSWORD`: Password for authentication (default: admin123)
+  - ⚠️ Make sure to change these in production!
+
+Optional variables:
+- `NODE_ENV`: Application environment
+  - Set to "development" by default
+  - Use "production" for production builds
 
 ## Development
 
@@ -80,6 +103,7 @@ Created by [@ammaar](https://x.com/ammaar)
 - Never commit your `.env` file or expose your API keys
 - The `.gitignore` file is configured to exclude sensitive files
 - If you fork this repository, make sure to use your own API keys
+- Default authentication credentials should be changed in production
 
 ## License
 

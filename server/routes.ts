@@ -7,21 +7,26 @@ import {
 } from "@google/generative-ai";
 import { marked } from "marked";
 import { setupEnvironment } from "./env";
+import ApiKeyManager from "./apiKeyManager";
 
 const env = setupEnvironment();
-const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash-exp",
-  generationConfig: {
-    temperature: 0.9,
-    topP: 1,
-    topK: 1,
-    maxOutputTokens: 2048,
-  },
-});
+const apiKeyManager = new ApiKeyManager(env.GOOGLE_API_KEYS);
 
 // Store chat sessions in memory
 const chatSessions = new Map<string, ChatSession>();
+
+function getAIModel() {
+  const genAI = new GoogleGenerativeAI(apiKeyManager.getNextKey());
+  return genAI.getGenerativeModel({
+    model: "gemini-2.0-flash-exp",
+    generationConfig: {
+      temperature: 0.9,
+      topP: 1,
+      topK: 1,
+      maxOutputTokens: 2048,
+    },
+  });
+}
 
 // Format raw text into proper markdown
 async function formatResponseToMarkdown(
@@ -102,17 +107,69 @@ interface GroundingMetadata {
 }
 
 export function registerRoutes(app: Express): Server {
-  // Search endpoint - creates a new chat session
+  const server = createServer(app);
+
+  // Custom API Keys endpoints
+  app.post("/api/keys/custom", (req, res) => {
+    try {
+      const { keys } = req.body;
+      if (!Array.isArray(keys)) {
+        return res.status(400).json({ message: "Keys must be an array" });
+      }
+      
+      apiKeyManager.setCustomKeys(keys);
+      res.json({ 
+        message: "Custom keys set successfully",
+        isUsingCustomKeys: apiKeyManager.isUsingCustomKeys(),
+        keyCount: apiKeyManager.getKeyCount()
+      });
+    } catch (error: any) {
+      console.error("Error setting custom keys:", error);
+      res.status(500).json({
+        message: error.message || "Failed to set custom keys"
+      });
+    }
+  });
+
+  app.delete("/api/keys/custom", (req, res) => {
+    try {
+      apiKeyManager.clearCustomKeys();
+      res.json({ 
+        message: "Custom keys cleared successfully",
+        isUsingCustomKeys: false,
+        keyCount: apiKeyManager.getKeyCount()
+      });
+    } catch (error: any) {
+      console.error("Error clearing custom keys:", error);
+      res.status(500).json({
+        message: error.message || "Failed to clear custom keys"
+      });
+    }
+  });
+
+  app.get("/api/keys/status", (req, res) => {
+    try {
+      res.json({
+        isUsingCustomKeys: apiKeyManager.isUsingCustomKeys(),
+        keyCount: apiKeyManager.getKeyCount()
+      });
+    } catch (error: any) {
+      console.error("Error getting key status:", error);
+      res.status(500).json({
+        message: error.message || "Failed to get key status"
+      });
+    }
+  });
+
+  // Search endpoint
   app.get("/api/search", async (req, res) => {
     try {
       const query = req.query.q as string;
-
       if (!query) {
-        return res.status(400).json({
-          message: "Query parameter 'q' is required",
-        });
+        return res.status(400).json({ message: "Query parameter 'q' is required" });
       }
 
+      const model = getAIModel();
       // Create a new chat session with search capability
       const chat = model.startChat({
         tools: [
@@ -122,10 +179,10 @@ export function registerRoutes(app: Express): Server {
           },
         ],
       });
-
-      // Generate content with search tool
+      
       const result = await chat.sendMessage(query);
       const response = await result.response;
+      
       console.log(
         "Raw Google API Response:",
         JSON.stringify(
@@ -138,9 +195,8 @@ export function registerRoutes(app: Express): Server {
           2
         )
       );
-      const text = response.text();
 
-      // Format the response text to proper markdown/HTML
+      const text = response.text();
       const formattedText = await formatResponseToMarkdown(text);
 
       // Extract sources from grounding metadata
@@ -178,6 +234,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       const sources = Array.from(sourceMap.values());
+      console.log('Extracted sources:', JSON.stringify(sources, null, 2));
 
       // Generate a session ID and store the chat
       const sessionId = Math.random().toString(36).substring(7);
@@ -191,35 +248,26 @@ export function registerRoutes(app: Express): Server {
     } catch (error: any) {
       console.error("Search error:", error);
       res.status(500).json({
-        message:
-          error.message || "An error occurred while processing your search",
+        message: error.message || "An error occurred while processing your search",
       });
     }
   });
 
-  // Follow-up endpoint - continues existing chat session
+  // Follow-up endpoint
   app.post("/api/follow-up", async (req, res) => {
     try {
       const { sessionId, query } = req.body;
-
-      if (!sessionId || !query) {
-        return res.status(400).json({
-          message: "Both sessionId and query are required",
-        });
-      }
-
       const chat = chatSessions.get(sessionId);
+
       if (!chat) {
-        return res.status(404).json({
-          message: "Chat session not found",
-        });
+        return res.status(404).json({ message: "Chat session not found" });
       }
 
-      // Send follow-up message in existing chat
       const result = await chat.sendMessage(query);
       const response = await result.response;
+      
       console.log(
-        "Raw Google API Follow-up Response:",
+        "Raw Google API Response (Follow-up):",
         JSON.stringify(
           {
             text: response.text(),
@@ -230,9 +278,8 @@ export function registerRoutes(app: Express): Server {
           2
         )
       );
-      const text = response.text();
 
-      // Format the response text to proper markdown/HTML
+      const text = response.text();
       const formattedText = await formatResponseToMarkdown(text);
 
       // Extract sources from grounding metadata
@@ -270,6 +317,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       const sources = Array.from(sourceMap.values());
+      console.log('Extracted sources (Follow-up):', JSON.stringify(sources, null, 2));
 
       res.json({
         summary: formattedText,
@@ -278,13 +326,10 @@ export function registerRoutes(app: Express): Server {
     } catch (error: any) {
       console.error("Follow-up error:", error);
       res.status(500).json({
-        message:
-          error.message ||
-          "An error occurred while processing your follow-up question",
+        message: error.message || "An error occurred while processing your follow-up",
       });
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  return server;
 }

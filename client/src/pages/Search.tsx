@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SourceList } from '@/components/SourceList';
+import { UserMenu } from '@/components/UserMenu';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function Search() {
   const [location, setLocation] = useLocation();
@@ -16,13 +18,13 @@ export function Search() {
   const [originalQuery, setOriginalQuery] = useState<string | null>(null);
   const [isFollowUp, setIsFollowUp] = useState(false);
   const [followUpQuery, setFollowUpQuery] = useState<string | null>(null);
-  
+
   // Extract query from URL, handling both initial load and subsequent navigation
   const getQueryFromUrl = () => {
     const searchParams = new URLSearchParams(window.location.search);
     return searchParams.get('q') || '';
   };
-  
+
   const [searchQuery, setSearchQuery] = useState(getQueryFromUrl);
   const [refetchCounter, setRefetchCounter] = useState(0);
 
@@ -73,7 +75,7 @@ export function Search() {
           query: followUpQuery,
         }),
       });
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           const newResponse = await fetch(`/api/search?q=${encodeURIComponent(followUpQuery)}`);
@@ -89,7 +91,7 @@ export function Search() {
         }
         throw new Error('Follow-up failed');
       }
-      
+
       const result = await response.json();
       console.log('Follow-up API Response:', JSON.stringify(result, null, 2));
       return result;
@@ -142,13 +144,17 @@ export function Search() {
       transition={{ duration: 0.3 }}
       className="min-h-screen bg-background"
     >
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <UserMenu />
       <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4 }}
         className="max-w-6xl mx-auto p-4"
       >
-        <motion.div 
+        <motion.div
           className="flex items-center gap-4 mb-6"
           initial={{ x: -20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}

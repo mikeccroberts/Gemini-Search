@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Search } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Logo } from '@/components/Logo';
+import { UserMenu } from '@/components/UserMenu';
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { CustomKeysManager } from "@/components/CustomKeysManager";
+import { useToast } from "@/components/ui/use-toast";
 
 export function Home() {
   const [query, setQuery] = useState('');
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,9 +21,55 @@ export function Home() {
     }
   };
 
+  const handleCustomKeysChange = async (keys: string[]) => {
+    try {
+      if (keys.length === 0) {
+        // Clear custom keys
+        await fetch("/api/keys/custom", {
+          method: "DELETE",
+        });
+        toast({
+          title: "Custom keys cleared",
+          description: "Using default API keys",
+        });
+      } else {
+        // Set custom keys
+        const response = await fetch("/api/keys/custom", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ keys }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to set custom keys");
+        }
+
+        toast({
+          title: "Custom keys updated",
+          description: `Now using ${keys.length} custom API key${keys.length > 1 ? 's' : ''}`,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating custom keys:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update custom keys",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-      <ThemeToggle />
+      <div className="absolute top-4 left-4">
+        <CustomKeysManager onKeysChange={handleCustomKeysChange} />
+      </div>
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        <UserMenu />
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-3xl px-4 animate-fade-in">
         <div className="flex flex-col items-center mb-8">
           <Logo className="mb-6" />
@@ -25,7 +77,7 @@ export function Home() {
             What do you want to know?
           </h1>
         </div>
-        
+
         <form onSubmit={handleSearch} className="w-full">
           <div className="relative group">
             <input
@@ -43,7 +95,7 @@ export function Home() {
               style={{ fontFamily: 'Inter, sans-serif' }}
               autoFocus
             />
-            <button 
+            <button
               type="submit"
               disabled={!query.trim()}
               className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full

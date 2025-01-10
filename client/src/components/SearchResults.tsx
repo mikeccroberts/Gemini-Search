@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Copy } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { SourceList } from '@/components/SourceList';
 import { Logo } from '@/components/Logo';
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 interface SearchResultsProps {
   query: string;
@@ -17,7 +19,7 @@ interface SearchResultsProps {
   originalQuery?: string;
 }
 
-export function SearchResults({ 
+export function SearchResults({
   query,
   results,
   isLoading,
@@ -26,12 +28,33 @@ export function SearchResults({
   originalQuery
 }: SearchResultsProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (results && contentRef.current) {
       contentRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [results]);
+
+  const copyContent = async () => {
+    if (contentRef.current) {
+      try {
+        // Get the text content without HTML tags
+        const textContent = contentRef.current.innerText;
+        await navigator.clipboard.writeText(textContent);
+        toast({
+          title: "Copied to clipboard",
+          description: "The search result has been copied to your clipboard.",
+        });
+      } catch (err) {
+        toast({
+          title: "Failed to copy",
+          description: "Please try again or copy manually.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   if (error) {
     return (
@@ -90,15 +113,13 @@ export function SearchResults({
       </motion.div>
 
       {/* Sources Section */}
-      {results.sources && results.sources.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <SourceList sources={results.sources} />
-        </motion.div>
-      )}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <SourceList sources={results.sources || []} />
+      </motion.div>
 
       {/* Main Content */}
       <Card className="overflow-hidden shadow-md">
@@ -106,11 +127,20 @@ export function SearchResults({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.4 }}
-          className="py-4 px-8"
+          className="py-4 px-8 relative"
         >
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={copyContent}
+            title="Copy content"
+            className="absolute top-4 right-4"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
           <div
             className={cn(
-              "prose prose-slate max-w-none",
+              "prose prose-slate max-w-none mt-8",
               "dark:prose-invert",
               "prose-headings:font-bold prose-headings:mb-4",
               "prose-h2:text-2xl prose-h2:mt-8 prose-h2:border-b prose-h2:pb-2 prose-h2:border-border",
@@ -121,7 +151,7 @@ export function SearchResults({
               "prose-strong:font-semibold",
               "prose-a:text-primary prose-a:no-underline hover:prose-a:text-primary/80",
             )}
-            dangerouslySetInnerHTML={{ 
+            dangerouslySetInnerHTML={{
               __html: results.summary
             }}
           />

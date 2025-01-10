@@ -2,8 +2,10 @@ import { setupEnvironment } from "./env";
 import path from "path";
 import { fileURLToPath } from "url";
 import express, { type Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { setupAuthRoutes, isAuthenticated } from "./auth";
 
 // Setup environment variables first
 const env = setupEnvironment();
@@ -18,6 +20,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -50,6 +53,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Setup auth routes first
+  setupAuthRoutes(app);
+  
+  // Protect all API routes except auth routes
+  app.use('/api/*', (req, res, next) => {
+    if (req.path.startsWith('/api/auth/')) {
+      return next();
+    }
+    return isAuthenticated(req, res, next);
+  });
+  
   const server = registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -60,17 +74,12 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 3000
-  // this serves both the API and the client
   const PORT = 3000;
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);

@@ -1,0 +1,9 @@
+# Cursor files
+.cursorrules
+.cursorignore
+
+# Environment
+*.env
+
+# Mac OS
+.DS_Store
