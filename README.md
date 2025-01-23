@@ -98,6 +98,81 @@ Optional variables:
 - `npm run start`: Run the production server
 - `npm run check`: Run TypeScript type checking
 
+## 🐳 Docker Support
+
+### Project Structure
+```
+.
+├── Dockerfile          # Main Dockerfile for production build
+├── docker-compose.yml  # Docker compose configuration
+├── .dockerignore      # Files to be ignored by Docker
+└── .env               # Environment variables (not in git)
+```
+
+### Environment Variables Setup
+
+1. Local Development:
+```bash
+# Copy the example env file
+cp .env.example .env
+
+# Edit .env with your values
+GOOGLE_API_KEYS=your-api-key
+AUTH_USERNAME=admin
+AUTH_PASSWORD=your-secure-password
+```
+
+2. Docker Environment:
+
+Option 1 - Using env file with Docker run:
+```bash
+# Run container with env file
+docker run --env-file .env ai-chat-app
+```
+
+Option 2 - Using env file with Docker Compose:
+```yaml
+services:
+  app:
+    env_file:
+      - .env
+```
+
+Option 3 - Direct environment variables in Docker Compose:
+```yaml
+services:
+  app:
+    environment:
+      - GOOGLE_API_KEYS=${GOOGLE_API_KEYS}
+      - AUTH_USERNAME=${AUTH_USERNAME}
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
+```
+
+### Building and Running
+
+1. Build the Docker image:
+```bash
+# Build using Dockerfile
+docker build -t ai-chat-app .
+
+# Or build using Docker Compose
+docker compose build
+```
+
+2. Run the application:
+```bash
+# Using Docker
+docker run -p 3000:3000 --env-file .env ai-chat-app
+
+# Using Docker Compose
+docker compose up
+```
+
+3. Development mode with hot-reload:
+```bash
+docker compose up --build
+```
+
 ## Security Notes
 
 - Never commit your `.env` file or expose your API keys
