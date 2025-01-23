@@ -1,17 +1,46 @@
-# 使用官方 Nginx 镜像作为基础镜像
-FROM nginx:alpine
+# Build stage
+FROM node:18-alpine as builder
 
-# 删除默认的 Nginx 网站内容
-RUN rm -rf /usr/share/nginx/html/*
+WORKDIR /app
 
-# 将构建的前端文件复制到 Nginx 默认的公开目录
-COPY dist/ /usr/share/nginx/html/
+# Copy package files
+COPY package*.json ./
 
-# 复制自定义的 Nginx 配置文件
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install all dependencies
+RUN npm install
 
-# 暴露 Nginx 的 80 端口
-EXPOSE 80
+# Copy source code
+COPY . .
 
-# 启动 Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Rebuild esbuild for current platform
+RUN npm rebuild esbuild
+
+ENV NODE_ENV=production
+
+# Build the project
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies but exclude certain dev dependencies
+RUN npm install --production \
+    && npm install vite@5.4.9 \
+    && rm -rf /root/.npm
+
+# Copy built files from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Clean up
+RUN npm cache clean --force \
+    && rm -rf /tmp/* \
+    && rm -rf /var/cache/apk/*
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

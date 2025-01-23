@@ -2,13 +2,10 @@ import express, { type Express } from "express";
 import fs from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer, createLogger } from "vite";
+import type { Server } from "http";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-import { type Server } from "http";
-import viteConfig from "../vite.config";
-
-const viteLogger = createLogger();
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -22,15 +19,21 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('setupVite should not be called in production');
+  }
+  
+  const { createServer: createViteServer, createLogger } = await import('vite');
+  const viteConfig = await import('../vite.config');
+  const viteLogger = createLogger();
+
   const vite = await createViteServer({
-    ...viteConfig,
+    ...viteConfig.default,
     configFile: false,
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {
-        if (
-          msg.includes("[TypeScript] Found 0 errors. Watching for file changes")
-        ) {
+        if (msg.includes("[TypeScript] Found 0 errors. Watching for file changes")) {
           log("no errors found", "tsc");
           return;
         }
@@ -57,14 +60,7 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const clientTemplate = path.resolve(
-        __dirname,
-        "..",
-        "client",
-        "index.html",
-      );
-
-      // always reload the index.html file from disk incase it changes
+      const clientTemplate = path.resolve(__dirname, "..", "client", "index.html");
       const template = await fs.promises.readFile(clientTemplate, "utf-8");
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
