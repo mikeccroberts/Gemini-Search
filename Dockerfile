@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine as builder
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -15,8 +15,6 @@ COPY . .
 # Rebuild esbuild for current platform
 RUN npm rebuild esbuild
 
-ENV NODE_ENV=production
-
 # Build the project
 RUN npm run build
 
@@ -28,9 +26,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies but exclude certain dev dependencies
+# Install production dependencies only
 RUN npm install --production \
-    && npm install vite@5.4.9 \
     && rm -rf /root/.npm
 
 # Copy built files from builder stage
@@ -43,4 +40,5 @@ RUN npm cache clean --force \
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+# Run the application
+CMD ["node", "dist/index.js"]

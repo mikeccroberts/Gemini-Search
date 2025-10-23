@@ -1,17 +1,36 @@
+# Dependencies
 node_modules
-npm-debug.log
-.git
-.env
-*.md
-.vscode
-.DS_Store
+
+# Build outputs (will be generated in container)
 dist
 build
 coverage
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-*.log
+
+# Environment files (should be passed via docker-compose or env vars)
+.env
 .env.*
+!.env.example
+
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Development and testing
 .aider.*
+*.test.ts
+*.spec.ts
+
+# Documentation (optional - uncomment to exclude)
+# *.md

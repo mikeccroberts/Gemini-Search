@@ -103,75 +103,91 @@ Optional variables:
 ### Project Structure
 ```
 .
-├── Dockerfile          # Main Dockerfile for production build
-├── docker-compose.yml  # Docker compose configuration
-├── .dockerignore      # Files to be ignored by Docker
-└── .env               # Environment variables (not in git)
+├── Dockerfile              # Production-optimized multi-stage build
+├── docker-compose.yml      # Production Docker Compose configuration
+├── docker-compose.dev.yml  # Development Docker Compose configuration
+├── .dockerignore          # Files to be ignored by Docker
+└── .env                   # Environment variables (not in git)
 ```
 
 ### Environment Variables Setup
 
-1. Local Development:
+1. Copy the example env file and configure:
 ```bash
-# Copy the example env file
 cp .env.example .env
+```
 
-# Edit .env with your values
-GOOGLE_API_KEYS=your-api-key
+2. Edit `.env` with your values:
+```bash
+# Required - set to "production" for production deployment
+NODE_ENV=development
+
+# Required - Google API keys
+GOOGLE_API_KEYS=your-api-key-1,your-api-key-2
+
+# Required - Authentication (⚠️ Change in production!)
 AUTH_USERNAME=admin
 AUTH_PASSWORD=your-secure-password
 ```
 
-2. Docker Environment:
-
-Option 1 - Using env file with Docker run:
-```bash
-# Run container with env file
-docker run --env-file .env ai-chat-app
-```
-
-Option 2 - Using env file with Docker Compose:
-```yaml
-services:
-  app:
-    env_file:
-      - .env
-```
-
-Option 3 - Direct environment variables in Docker Compose:
-```yaml
-services:
-  app:
-    environment:
-      - GOOGLE_API_KEYS=${GOOGLE_API_KEYS}
-      - AUTH_USERNAME=${AUTH_USERNAME}
-      - AUTH_PASSWORD=${AUTH_PASSWORD}
-```
-
 ### Building and Running
 
-1. Build the Docker image:
-```bash
-# Build using Dockerfile
-docker build -t ai-chat-app .
+#### Production Mode
 
-# Or build using Docker Compose
-docker compose build
+1. Build and run with Docker Compose:
+```bash
+# Build and start the production container
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop the container
+docker compose down
 ```
 
-2. Run the application:
+2. Using Docker directly:
 ```bash
-# Using Docker
-docker run -p 3000:3000 --env-file .env ai-chat-app
+# Build the image
+docker build -t gemini-search .
 
-# Using Docker Compose
-docker compose up
+# Run the container
+docker run -p 3000:3000 --env-file .env gemini-search
 ```
 
-3. Development mode with hot-reload:
+#### Development Mode
+
+For development with hot-reload:
 ```bash
-docker compose up --build
+# Start development environment
+docker compose -f docker-compose.dev.yml up
+
+# Or rebuild and start
+docker compose -f docker-compose.dev.yml up --build
 ```
+
+### Docker Configuration Details
+
+**Production (`docker-compose.yml`):**
+- Multi-stage build for smaller image size
+- Production-only dependencies
+- Runs compiled JavaScript from `dist/` directory
+- Optimized for security and performance
+- Default `NODE_ENV=production`
+
+**Development (`docker-compose.dev.yml`):**
+- Hot-reload support with volume mounting
+- Development dependencies included
+- Runs TypeScript directly with `tsx`
+- Default `NODE_ENV=development`
+
+### Important Security Notes
+
+⚠️ **Production Deployment:**
+- Always use strong, unique credentials (not default `admin`/`admin123`)
+- The app enforces this: default credentials are blocked when `NODE_ENV=production`
+- Keep your `.env` file secure and never commit it to version control
+- Use secrets management for production deployments (e.g., Docker secrets, Kubernetes secrets)
 
 ## Security Notes
 
