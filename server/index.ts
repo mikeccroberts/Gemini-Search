@@ -10,7 +10,11 @@ import { setupAuthRoutes, isAuthenticated } from "./auth";
 // Setup environment variables first
 const env = setupEnvironment();
 console.log("\n--- Environment Setup Debug ---");
-console.log("Environment variables loaded:", env);
+console.log("Environment initialized", {
+  nodeEnv: env.NODE_ENV,
+  googleApiKeyCount: env.GOOGLE_API_KEYS.length,
+  authCredentialsConfigured: Boolean(env.AUTH_USERNAME && env.AUTH_PASSWORD),
+});
 console.log("--- End Debug ---\n");
 
 // Get the directory name properly with ES modules
