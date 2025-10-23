@@ -1,11 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { randomBytes } from "crypto";
 import {
   GoogleGenerativeAI,
   type ChatSession,
-  type GenerateContentResult,
 } from "@google/generative-ai";
 import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
+import type { IOptions as SanitizeOptions } from "sanitize-html";
 import { setupEnvironment } from "./env";
 import ApiKeyManager from "./apiKeyManager";
 
@@ -13,7 +15,64 @@ const env = setupEnvironment();
 const apiKeyManager = new ApiKeyManager(env.GOOGLE_API_KEYS);
 
 // Store chat sessions in memory
-const chatSessions = new Map<string, ChatSession>();
+interface StoredChatSession {
+  chat: ChatSession;
+  ownerSessionId: string | null;
+  expiresAt: number;
+}
+
+const chatSessions = new Map<string, StoredChatSession>();
+
+const CHAT_SESSION_TTL_MS = 30 * 60 * 1000;
+
+const MARKDOWN_SANITIZE_OPTIONS: SanitizeOptions = {
+  allowedTags: [
+    "p",
+    "span",
+    "em",
+    "strong",
+    "a",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "h2",
+    "h3",
+    "h4",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "hr",
+    "br",
+    "sup",
+    "img",
+  ],
+  allowedAttributes: {
+    a: ["href", "title"],
+    img: ["src", "alt", "title"],
+  },
+  allowedSchemes: ["http", "https", "mailto"],
+};
+
+const shouldLogDebug = process.env.NODE_ENV !== "production";
+
+function createChatSessionId(): string {
+  return randomBytes(32).toString("hex");
+}
+
+function pruneExpiredChatSessions() {
+  const now = Date.now();
+  for (const [id, session] of Array.from(chatSessions.entries())) {
+    if (session.expiresAt <= now) {
+      chatSessions.delete(id);
+    }
+  }
+}
 
 function getAIModel() {
   const genAI = new GoogleGenerativeAI(apiKeyManager.getNextKey());
@@ -74,8 +133,9 @@ async function formatResponseToMarkdown(
     breaks: true,
   });
 
-  // Convert markdown to HTML using marked
-  return marked.parse(formatted);
+  const html = await marked.parse(formatted);
+
+  return sanitizeHtml(html, MARKDOWN_SANITIZE_OPTIONS);
 }
 
 interface WebSource {
@@ -169,6 +229,8 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Query parameter 'q' is required" });
       }
 
+      pruneExpiredChatSessions();
+
       const model = getAIModel();
       // Create a new chat session with search capability
       const chat = model.startChat({
@@ -182,19 +244,21 @@ export function registerRoutes(app: Express): Server {
       
       const result = await chat.sendMessage(query);
       const response = await result.response;
-      
-      console.log(
-        "Raw Google API Response:",
-        JSON.stringify(
-          {
-            text: response.text(),
-            candidates: response.candidates,
-            groundingMetadata: response.candidates?.[0]?.groundingMetadata,
-          },
-          null,
-          2
-        )
-      );
+
+      if (shouldLogDebug) {
+        console.log(
+          "Raw Google API Response:",
+          JSON.stringify(
+            {
+              text: response.text(),
+              candidates: response.candidates,
+              groundingMetadata: response.candidates?.[0]?.groundingMetadata,
+            },
+            null,
+            2
+          )
+        );
+      }
 
       const text = response.text();
       const formattedText = await formatResponseToMarkdown(text);
@@ -234,11 +298,18 @@ export function registerRoutes(app: Express): Server {
       }
 
       const sources = Array.from(sourceMap.values());
-      console.log('Extracted sources:', JSON.stringify(sources, null, 2));
+      if (shouldLogDebug) {
+        console.log('Extracted sources:', JSON.stringify(sources, null, 2));
+      }
 
       // Generate a session ID and store the chat
-      const sessionId = Math.random().toString(36).substring(7);
-      chatSessions.set(sessionId, chat);
+      const sessionId = createChatSessionId();
+      const ownerSessionId = req.cookies?.sessionId ?? null;
+      chatSessions.set(sessionId, {
+        chat,
+        ownerSessionId,
+        expiresAt: Date.now() + CHAT_SESSION_TTL_MS,
+      });
 
       res.json({
         sessionId,
@@ -257,27 +328,48 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/follow-up", async (req, res) => {
     try {
       const { sessionId, query } = req.body;
-      const chat = chatSessions.get(sessionId);
 
-      if (!chat) {
+      if (typeof sessionId !== "string" || sessionId.trim() === "") {
+        return res.status(400).json({ message: "A valid sessionId is required" });
+      }
+
+      pruneExpiredChatSessions();
+
+      const storedSession = chatSessions.get(sessionId);
+
+      if (!storedSession) {
         return res.status(404).json({ message: "Chat session not found" });
       }
 
-      const result = await chat.sendMessage(query);
+      const requesterSessionId = req.cookies?.sessionId ?? null;
+      if (
+        storedSession.ownerSessionId &&
+        storedSession.ownerSessionId !== requesterSessionId
+      ) {
+        return res.status(403).json({ message: "Chat session is not accessible" });
+      }
+
+      if (typeof query !== "string" || query.trim() === "") {
+        return res.status(400).json({ message: "A follow-up query is required" });
+      }
+
+      const result = await storedSession.chat.sendMessage(query);
       const response = await result.response;
-      
-      console.log(
-        "Raw Google API Response (Follow-up):",
-        JSON.stringify(
-          {
-            text: response.text(),
-            candidates: response.candidates,
-            groundingMetadata: response.candidates?.[0]?.groundingMetadata,
-          },
-          null,
-          2
-        )
-      );
+
+      if (shouldLogDebug) {
+        console.log(
+          "Raw Google API Response (Follow-up):",
+          JSON.stringify(
+            {
+              text: response.text(),
+              candidates: response.candidates,
+              groundingMetadata: response.candidates?.[0]?.groundingMetadata,
+            },
+            null,
+            2
+          )
+        );
+      }
 
       const text = response.text();
       const formattedText = await formatResponseToMarkdown(text);
@@ -317,7 +409,14 @@ export function registerRoutes(app: Express): Server {
       }
 
       const sources = Array.from(sourceMap.values());
-      console.log('Extracted sources (Follow-up):', JSON.stringify(sources, null, 2));
+      if (shouldLogDebug) {
+        console.log('Extracted sources (Follow-up):', JSON.stringify(sources, null, 2));
+      }
+
+      chatSessions.set(sessionId, {
+        ...storedSession,
+        expiresAt: Date.now() + CHAT_SESSION_TTL_MS,
+      });
 
       res.json({
         summary: formattedText,

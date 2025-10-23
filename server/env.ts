@@ -38,10 +38,19 @@ export function setupEnvironment() {
     throw new Error('No valid Google API keys provided');
   }
 
+  const nodeEnv = process.env.NODE_ENV || "development";
+  if (
+    nodeEnv === "production" &&
+    process.env.AUTH_USERNAME === "admin" &&
+    process.env.AUTH_PASSWORD === "admin123"
+  ) {
+    throw new Error('Default authentication credentials are not allowed in production');
+  }
+
   return {
     GOOGLE_API_KEYS: apiKeys,
     AUTH_USERNAME: process.env.AUTH_USERNAME,
     AUTH_PASSWORD: process.env.AUTH_PASSWORD,
-    NODE_ENV: process.env.NODE_ENV || "development",
+    NODE_ENV: nodeEnv,
   };
 }
